@@ -1,0 +1,7 @@
+i*.pyc
+.*.sw*
+database/rnacentral*
+database/Rfam*
+database/release_notes.txt
+database/rfam_annotations.tsv.gz
+database/version.txt*
