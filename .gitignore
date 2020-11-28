@@ -1,6 +1,10 @@
-i*.pyc
+*.pyc
 .*.sw*
+
+
 database/rnacentral*
+database/nt*
+database/taxdb*
 database/Rfam*
 database/release_notes.txt
 database/rfam_annotations.tsv.gz
