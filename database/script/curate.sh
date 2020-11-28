@@ -5,7 +5,10 @@ rootdir=`dirname $bindir`
 cd $rootdir
 
 echo "extract fasta"
-zcat rnacentral_species_specific_ids.fasta.gz|grep -ohP "^\S+"| $bindir/fastaNA -| $bindir/catRNAcentral - rnacentral.fasta rnacentral.tsv
+if [ -s "rnacentral_species_specific_ids.fasta.gz" ];then
+    zcat rnacentral_species_specific_ids.fasta.gz|grep -ohP "^\S+"| $bindir/fastaNA -| $bindir/catRNAcentral - rnacentral.fasta rnacentral.tsv
+    rm rnacentral_species_specific_ids.fasta.gz
+fi
 
 echo "makeblastdb"
 $bindir/makeblastdb -in rnacentral.fasta -parse_seqids -hash_index -dbtype nucl
@@ -13,12 +16,18 @@ $bindir/makeblastdb -in rnacentral.fasta -parse_seqids -hash_index -dbtype nucl
 ##echo "index hmmerdb"
 ##$bindir/esl-sfetch --index rnacentral.fasta
 ##$bindir/makehmmerdb --informat fasta rnacentral.fasta rnacentral.fasta.hmmerdb
-rm rnacentral_species_specific_ids.fasta.gz
+
+echo "unzip Rfam"
+if [ -s "Rfam.cm.gz" ];then
+    gzip -d Rfam.cm.gz
+fi
 
 echo "extract nt"
 for filename in `ls nt*tar.gz`;do
     tar -xvf $filename
     rm $filename
 done
-zcat nt.gz | grep -ohP "^\S+" | $bindir/fastaNA - > nt
-rm nt.gz
+if [ -s "nt.gz" ];then
+    zcat nt.gz | grep -ohP "^\S+" | $bindir/fastaNA - > nt
+    rm nt.gz
+fi
