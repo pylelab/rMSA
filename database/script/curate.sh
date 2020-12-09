@@ -21,6 +21,8 @@ echo "unzip Rfam"
 if [ -s "Rfam.cm.gz" ];then
     gzip -d Rfam.cm.gz
 fi
+rm Rfam.cm.*
+$bindir/cmpress Rfam.cm
 
 echo "extract nt"
 for filename in `ls nt*tar.gz`;do
