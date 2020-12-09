@@ -7,6 +7,7 @@ git clone https://github.com/kad-ecoli/rMSA
 cd rMSA
 ./database/script/update.sh    # Download RNAcentral and nt
 ```
+rMSA is for 64bit Linux (x86-64) only.
 
 ## Run the program ##
 ```bash
