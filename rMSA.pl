@@ -325,52 +325,34 @@ else
     &System("cat $tmpdir/db0 $tmpdir/blastn*.db > $tmpdir/trim.db");
     &rmredundant_rawseq("$tmpdir/trim.db", "$tmpdir/db");
     &plain2gz("$tmpdir/db", "$prefix.db.gz");
-    if (-s "$prefix.db.gz" && `zcat $prefix.db.gz|wc -l`+0>0)
-    {
-        &System("rm $prefix.db0.gz");
-    }
+}
+if (-s "$prefix.db0.gz" && -s "$prefix.db.gz" && `zcat $prefix.db.gz|wc -l`+0>0)
+{
+    &System("rm $prefix.db0.gz");
 }
 
-#### nhmmer ####
+#### nhmmer, cmbuild and cmcalibrate ####
 my $hitnum=`grep '^>' $tmpdir/db|wc -l`+0;
-print "==== local alignment of $hitnum sequences by nhmmer ====\n";
-
-if (-s "$prefix.nhmmer.afa.gz" && `zcat $prefix.nhmmer.afa.gz |wc -l`+0>0)
-{
-    &gz2plain("$prefix.nhmmer.afa.gz", "$tmpdir/nhmmer.afa");
-}
-else
-{
-    &System("$bindir/qnhmmer --noali -A $tmpdir/nhmmer.a2m --cpu $cpu --watson $tmpdir/seq.fasta $tmpdir/db | grep 'no alignment saved'");
-    &addQuery2a2m("$tmpdir/nhmmer.a2m","$tmpdir/nhmmer.unfilter.afa");
-    &run_hhfilter($max_hhfilter_seqs,0,"$tmpdir/nhmmer.unfilter.afa","$tmpdir/nhmmer.afa");
-    &plain2gz("$tmpdir/nhmmer.afa", "$prefix.nhmmer.afa.gz");
-}
-
-my $Nf=&run_calNf("$tmpdir/nhmmer.afa");
-if ($Nf>=$target_Nf)
-{
-    print "output nhmmer.afa (Nf>=$Nf) as final MSA\n";
-    &System("cp $tmpdir/nhmmer.afa $prefix.afa");
-    exit(0);
-}
-
-#### cmbuild and cmcalibrate ####
-print "==== making covariance model ====\n";
+print "==== making covariance model from local alignment of $hitnum sequences by nhmmer ====\n";
 if (-s "$prefix.cm")
 {
     &System("cp $prefix.cm $tmpdir/infernal.cm");
 }
 else
 {
-    &System("$bindir/RNAfold --noPS $tmpdir/seq.fasta | awk '{print \$1}' | tail -n +3 > $tmpdir/RNAfold.dbn") if (!-s "$tmpdir/RNAfold.dbn");
+    ## nhmmer initial alignment ##
+    &System("$bindir/qnhmmer --noali -A $tmpdir/nhmmer.a2m --cpu $cpu --watson $tmpdir/seq.fasta $tmpdir/db | grep 'no alignment saved'");
+    &addQuery2a2m("$tmpdir/nhmmer.a2m","$tmpdir/nhmmer.unfilter.afa");
+    &run_hhfilter($max_hhfilter_seqs,0,"$tmpdir/nhmmer.unfilter.afa","$tmpdir/nhmmer.afa");
     &System("$bindir/reformat.pl fas sto $tmpdir/nhmmer.afa $tmpdir/nhmmer.sto");
 
     ## reformat ss with according to gaps in reference sequence of .sto file ##
+    &System("$bindir/RNAfold --noPS $tmpdir/seq.fasta | awk '{print \$1}' | tail -n +3 > $tmpdir/RNAfold.dbn") if (!-s "$tmpdir/RNAfold.dbn");
     foreach my $i(`awk '{print \$2}' $tmpdir/nhmmer.sto | head -n5 | tail -n1 | grep -b -o - | sed 's/..\$//'`)
     {
         &System("sed -i \"s/./&-/$i\" $tmpdir/RNAfold.dbn");
     }
+
     ## add reformated ss from last step to .sto file ##
     my $txt="";
     foreach my $line(`head -n -1 $tmpdir/nhmmer.sto`)
@@ -588,12 +570,14 @@ sub run_hhfilter
         my $Nf=&run_calNf("$outfile");
         if ($Nf>$target_Nf)
         {
-            foreach $cov ((60,70))
+            my @cov_list=(60,70);
+            for (my $i=0;$i<scalar @cov_list;$i++)
             {
-                &System("$bindir/hhfilter -i $infile -id $id -cov $cov -o $outfile.tmp");
+                &System("$bindir/hhfilter -i $infile -id $id -cov $cov_list[$i] -o $outfile.tmp");
                 $Nf=&run_calNf("$outfile.tmp");
                 last if ($Nf<=$target_Nf);
                 &System("mv $outfile.tmp $outfile");
+                $cov=$cov_list[$i];
                 #$hitnum=`grep '>' $outfile|wc -l`+0;
                 #last if ($hitnum<=$max_hhfilter_seqs);
             }
