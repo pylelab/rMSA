@@ -9,3 +9,13 @@ database/Rfam*
 database/release_notes.txt
 database/rfam_annotations.tsv.gz
 database/version.txt*
+
+src/a3m2msa
+src/fasta2pfam
+src/fastaNA
+src/fastaOneLine
+src/fastNf
+src/fixAlnX
+src/pfam2fasta
+src/RemoveNonQueryPosition
+src/trimBlastN
