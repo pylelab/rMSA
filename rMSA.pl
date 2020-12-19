@@ -39,15 +39,13 @@ Input:
 EOF
 ;
 
-my $max_rfam_num     =300;    # maximum number of rfam families to parse
+my $max_rfam_num     =100;    # maximum number of rfam families to parse
 my $max_split_seqs   =5000;   # max number of blastn sequences to parse per batch
                               # control tmp file size. do not change final result
 my $max_target_seqs  =20000;  # max number of blastn sequences to report
 my $max_aln_seqs     =100000; # max number of blastn alignmnets to parse
 my $max_hhfilter_seqs=5000;   # max number of hhfilter sequences to report
 my $min_hhfilter_seqs=10;     # min number of hhfilter sequences to report
-my $max_mafft_qinsi  =50000;  # max $Lch * $hitnum for mafft-qinsi
-my $max_mafft_xinsi  =10000;  # max $Lch * $hitnum for mafft-xinsi
 my $target_Nf        =128;
 my $target_Nf_cov    =60;     # only sequences with cov>=$target_Nf_cov are
                               # included for Nf calculation
@@ -236,26 +234,23 @@ if (length $db0>0 && (!-s "$prefix.db.gz" || `zcat $prefix.db.gz|wc -l`+0==0)
 {
     system("$bindir/cmscan --tblout $tmpdir/cmscan.tblout -o $tmpdir/cmscan.out --noali $db0 $tmpdir/seq.fasta");
     my @family_list=();
-    my $pattern="";
     foreach my $line(`grep -v '#' $tmpdir/cmscan.tblout`)
     {
         if ($line=~/^\S+\s+(\S+)/)
         {
             my $family="$1";
             next if ( grep( /^$family$/, @family_list) );
-            if (scalar @family_list==0) { $pattern.= "($family)"; }
-            else                        { $pattern.="|($family)"; }
             push(@family_list, ("$family"));
             print "$family\n";
             last if (scalar @family_list>$max_rfam_num);
         }
     }
 
-    ### map rfam match to db1 ###
+    ### rfam_annotations.tsv.gz map rfam match to db1 ###
     # URS-Id Rfam-Model-Id Score E-value Sequence-Start Sequence-Stop
     # Model-Start Model-Stop Rfam-Model-Description
     # (0-indexed)
-    ### map rfam match to db2 ###
+    ### Rfam.full_region.gz map rfam match to db2 ###
     # rfam_acc rfamseq_acc seq_start seq_end bit_score evalue_score
     # cm_start cm_end truncated type
     for (my $dd=1;$dd<=2;$dd++)
@@ -268,8 +263,11 @@ if (length $db0>0 && (!-s "$prefix.db.gz" || `zcat $prefix.db.gz|wc -l`+0==0)
         $cat="zcat" if ("$db0tod"=~/.gz$/);
         &System("cp $db0tod $tmpdir/db0to$dd");
         my $tabfile="$tmpdir/rfam$dd.tab";
+        my $pattern=&list2pattern(@family_list);
         open(FP,">$tabfile");
-        foreach my $line(`$cat $tmpdir/db0to$dd|grep -P "$pattern"`)
+        my $k=4;
+        $k=6 if ($dd=2);
+        foreach my $line(`$cat $tmpdir/db0to$dd|grep -P "$pattern"|sort -gk$k,$k`)
         {
             if (($dd==1 && $line=~/^(\S+)\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(\d+)/)||
                 ($dd==2 && $line=~/^\S+\s+(\S+)\s+(\d+)\s+(\d+)/))
@@ -286,6 +284,22 @@ if (length $db0>0 && (!-s "$prefix.db.gz" || `zcat $prefix.db.gz|wc -l`+0==0)
             }
         }
         close(FP);
+        my $hitnum=`cat $tabfile|wc -l`+0;
+        if ($hitnum>$max_aln_seqs)
+        {
+            if (scalar @family_list>=2)
+            {
+                my $family=pop @family_list;
+                print "db$dd. cmscan hit number $hitnum>$max_aln_seqs.\n";
+                print "remove the last family $family.\n";
+                $dd--;
+                next;
+            }
+            else
+            {
+                &System("head -$max_aln_seqs $tabfile > $tabfile.tmp; mv $tabfile.tmp $tabfile");
+            }
+        }
         &System("rm $tmpdir/db0to$dd");
         &retrieveSeq($tabfile, $db1, "rfam1") if ($dd==1);
         &retrieveSeq($tabfile, $db2, "rfam2") if ($dd==2);
@@ -646,6 +660,19 @@ sub plain2gz
         &System("cp $infile $outfile");
     }
     return;
+}
+
+#### make grep pattern from family list ####
+sub list2pattern
+{
+    my (@family_list)=@_;
+    my $pattern="";
+    foreach my $family(@family_list)
+    {
+        if (length $pattern==0) { $pattern.= "($family)"; }
+        else                    { $pattern.="|($family)"; }
+    }
+    return $pattern;
 }
 
 #### run system command ####
