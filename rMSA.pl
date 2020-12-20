@@ -412,8 +412,10 @@ if ($Nf>=$target_Nf)
 print "==== cmsearch hits from cmsearch ====\n";
 for (my $dd=1;$dd<=2;$dd++)
 {
-    if (-s "$prefix.db$dd.gz" && `zcat $prefix.db$dd.gz|wc -l`+0>0)
-    {
+    if (-s "$prefix.db$dd.gz" && (`zcat $prefix.db$dd.gz|wc -l`+0>0 ||
+       (-s "$prefix.cmsearch.$dd.afa.gz" && `zcat $prefix.cmsearch.$dd.afa.gz|wc -l`+0>0)))
+    {   # sometimes cmsearch db$dd cannot find additional hits.
+        # in this case, we $prefix.db$dd.gz is empty.
         &gz2plain("$prefix.db$dd.gz", "$tmpdir/db$dd");
     }
     else
