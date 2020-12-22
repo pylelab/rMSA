@@ -169,7 +169,7 @@ my $seqnum=`grep '^>' $inputfasta|wc -l`;
 if ($seqnum>=2)
 {
     print "ERROR! More than one sequence in $inputfasta.\n";
-    exit(1)
+    &Exit($tmpdir);
 }
 my $sequence=`$bindir/fastaNA $inputfasta | $bindir/fastaOneLine -|tail -1`;
 chomp($sequence);
@@ -178,7 +178,7 @@ print ">".abs_path($inputfasta)."\tlength=$Lch\n$sequence\n";
 if ($Lch==0)
 {
     print "ERROR! Sequence length 0.\n";
-    exit(1)
+    &Exit($tmpdir);
 }
 open(FP,">$tmpdir/seq.fasta");
 print FP ">query\n$sequence\n";
@@ -192,7 +192,7 @@ if (length $ssfile>0 && !-s "$prefix.cm")
     if (!-s "$ssfile")
     {
         print "ERROR! No such file $ssfile\n".
-        exit(1);
+        &Exit($tmpdir);
     }
     system("cp $ssfile $tmpdir/input.dbn");
     my $ss="";
@@ -206,20 +206,20 @@ if (length $ssfile>0 && !-s "$prefix.cm")
         print "ERROR! Only the following 3 symbols are allowed:\n";
         print "( ) .\n";
         print "Pseudoknots are not allowed\n";
-        exit(1);
+        &Exit($tmpdir);
     }
     my $Lss=length $ss;
     if ($Lss!=$Lch)
     {
         print "ERROR! $Lss!=$Lch. inconsistency in SS and sequence length\n";
-        exit(1);
+        &Exit($tmpdir);
     }
     my $count_left =$ss=~ tr/(//;
     my $count_right=$ss=~ tr/)//;
     if ($count_left!=$count_right)
     {
         print "ERROR! $count_right!=$count_left. number of ) different from that of (\n";
-        exit(1);
+        &Exit($tmpdir);
     }
     open(FP,">$tmpdir/RNAfold.dbn");
     print FP "$ss\n";
@@ -405,7 +405,7 @@ if ($Nf>=$target_Nf)
 {
     print "output cmsearch.afa (Nf>=$Nf) as final MSA\n";
     &System("cp $tmpdir/cmsearch.afa $prefix.afa");
-    exit(0);
+    &Exit($tmpdir);
 }
 
 #### cmsearch for db1 and db2 ####
@@ -471,7 +471,7 @@ for (my $dd=1;$dd<=2;$dd++)
     {
         print "output cmsearch.$dd.afa (Nf>=$Nf) as final MSA\n";
         &System("cp $tmpdir/cmsearch.$dd.afa $prefix.afa");
-        exit(0);
+        &Exit($tmpdir);
     }
 }
 
@@ -491,24 +491,47 @@ foreach my $incE((0.1,1,10))
         &addQuery2a2m("$tmpdir/cmsearch.2.$incE.a2m","$tmpdir/cmsearch.2.$incE.unfilter.afa");
         &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.2.$incE.unfilter.afa","$tmpdir/cmsearch.2.$incE.afa");
         &plain2gz("$tmpdir/cmsearch.2.$incE.afa", "$prefix.cmsearch.2.$incE.afa.gz");
-        my $Nf=&run_calNf("$tmpdir/cmsearch.2.$incE.afa");
-        my $hitnum=`grep '^>' $tmpdir/cmsearch.2.$incE.afa|wc -l`+0;
-        if ($incE==10 || $Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs)
-        {
-            print "output cmsearch.2.$incE.afa (Nf>=$Nf) as final MSA\n";
-            &System("cp $tmpdir/cmsearch.2.$incE.afa $prefix.afa");
-            exit(0);
-        }
     }
+    my $Nf=&run_calNf("$tmpdir/cmsearch.2.$incE.afa");
+    my $hitnum=`grep '^>' $tmpdir/cmsearch.2.$incE.afa|wc -l`+0;
+    last if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs);
 }
 
+#### output the MSA with the highest nf ####
+my $max_Nf=0;
+my $final_msa="cmsearch.2.afa";
+foreach my $msa(qw(
+    cmsearch.afa
+    cmsearch.1.afa
+    cmsearch.2.afa
+    cmsearch.2.0.1.afa
+    cmsearch.2.1.afa
+    cmsearch.2.10.afa
+))
+{
+    my $Nf=`$bindir/fastNf $tmpdir/$msa`+0;
+    if ($Nf>=$max_Nf)
+    {
+        $max_Nf="$Nf";
+	$final_msa="$msa";
+    }
+}
+print "output $final_msa (Nf=$max_Nf) as final MSA\n";
+&System("cp $tmpdir/$final_msa $prefix.afa");
+&Exit($tmpdir);
 
-#### clean up ####
-&System("sync");
-&System("rm -rf $tmpdir") if (-d "$tmpdir");
-exit(0);
 
-#### add query to nhmmer/cmsearch a2m alignment ####
+#### submodules ####
+### exit and clean up tmp folder ###
+sub Exit
+{
+    my ($tmpdir)=@_;
+    &System("sync");
+    &System("rm -rf $tmpdir") if (-d "$tmpdir");
+    exit(0);
+}
+
+### add query to nhmmer/cmsearch a2m alignment ###
 sub addQuery2a2m
 {
     my ($infile,$outfile)=@_;
@@ -540,8 +563,8 @@ sub addQuery2a2m
 }
 
 
-#### retrive sequence from listed in tabfile from db, ####
-#### output the sequences to $tmpdir/$tag.db          ####
+### retrive sequence from listed in tabfile from db, ###
+### output the sequences to $tmpdir/$tag.db          ###
 sub retrieveSeq
 {
     my ($tabfile, $db, $tag)=@_;
@@ -560,7 +583,7 @@ sub retrieveSeq
     return;
 }
 
-#### remove identical sequences from unaligned database ####
+### remove identical sequences from unaligned database ###
 sub rmredundant_rawseq
 {
     my ($infile,$outfile)=@_;
@@ -571,7 +594,7 @@ sub rmredundant_rawseq
     return;
 }
 
-#### remove redundant sequences from MSA ####
+### remove redundant sequences from MSA ###
 sub run_hhfilter
 {
     my ($max_hhfilter_seqs,$min_hhfilter_seqs,$infile,$outfile)=@_;
@@ -621,7 +644,7 @@ sub run_hhfilter
     return $outfile;
 }
 
-#### calculate Nf for MSA ####
+### calculate Nf for MSA ###
 sub run_calNf
 {
     my ($infile)=@_;
@@ -630,7 +653,7 @@ sub run_calNf
     return `$bindir/fastNf $infile.$target_Nf_cov 0.8 0 $target_Nf_tmp`+0;
 }
 
-#### copy gzip compressed file to plain file ####
+### copy gzip compressed file to plain file ###
 sub gz2plain
 {
     my ($infile,$outfile)=@_;
@@ -647,7 +670,7 @@ sub gz2plain
     return;
 }
 
-#### copy plain file to gzip compressed file ####
+### copy plain file to gzip compressed file ###
 sub plain2gz
 {
     my ($infile,$outfile)=@_;
@@ -664,7 +687,7 @@ sub plain2gz
     return;
 }
 
-#### make grep pattern from family list ####
+### make grep pattern from family list ###
 sub list2pattern
 {
     my (@family_list)=@_;
@@ -677,7 +700,7 @@ sub list2pattern
     return $pattern;
 }
 
-#### run system command ####
+### run system command ###
 sub System
 {
     my ($cmd)=@_;
