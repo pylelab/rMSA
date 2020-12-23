@@ -187,6 +187,7 @@ my $task="blastn";
 $task="blastn-short" if ($Lch<30);
 
 #### prepare secondary structure ####
+$ssfile="$prefix.dbn" if (length $ssfile==0);
 if (length $ssfile>0 && !-s "$prefix.cm")
 {
     if (!-s "$ssfile")
@@ -358,32 +359,7 @@ else
     &System("$bindir/qnhmmer --noali -A $tmpdir/nhmmer.a2m --cpu $cpu --watson $tmpdir/seq.fasta $tmpdir/db | grep 'no alignment saved'");
     &addQuery2a2m("$tmpdir/nhmmer.a2m","$tmpdir/nhmmer.unfilter.afa");
     &run_hhfilter($max_hhfilter_seqs,0,"$tmpdir/nhmmer.unfilter.afa","$tmpdir/nhmmer.afa");
-    &System("$bindir/reformat.pl fas sto $tmpdir/nhmmer.afa $tmpdir/nhmmer.sto");
-
-    ## reformat ss with according to gaps in reference sequence of .sto file ##
-    &System("$bindir/RNAfold --noPS $tmpdir/seq.fasta | awk '{print \$1}' | tail -n +3 > $tmpdir/RNAfold.dbn") if (!-s "$tmpdir/RNAfold.dbn");
-    foreach my $i(`awk '{print \$2}' $tmpdir/nhmmer.sto | head -n5 | tail -n1 | grep -b -o - | sed 's/..\$//'`)
-    {
-        &System("sed -i \"s/./&-/$i\" $tmpdir/RNAfold.dbn");
-    }
-
-    ## add reformated ss from last step to .sto file ##
-    my $txt="";
-    foreach my $line(`head -n -1 $tmpdir/nhmmer.sto`)
-    {
-        chomp($line);
-        $line.="E=0.0" if ($line=~/^#=GF DE/);
-        $txt.="$line\n";
-    }
-    $txt.="#=GC SS_cons                     ";
-    $txt.=`cat $tmpdir/RNAfold.dbn`;
-    $txt.="//\n";
-    open(FP,">$tmpdir/RNAfold.sto");
-    print FP $txt;
-    close(FP);
-
-    &System("$bindir/cmbuild --hand -F $tmpdir/infernal.cm $tmpdir/RNAfold.sto");
-    &System("$bindir/cmcalibrate --cpu $cpu $tmpdir/infernal.cm");
+    &addSS2cm("$tmpdir/nhmmer.afa", "$tmpdir/infernal.cm");
     &System("cp $tmpdir/infernal.cm $prefix.cm");
 }
 
@@ -499,6 +475,7 @@ foreach my $incE((0.1,1,10))
 
 #### output the MSA with the highest nf ####
 my $max_Nf=0;
+my $max_hitnum=0;
 my $final_msa="cmsearch.2.afa";
 foreach my $msa(qw(
     cmsearch.afa
@@ -509,19 +486,102 @@ foreach my $msa(qw(
     cmsearch.2.10.afa
 ))
 {
-    my $Nf=`$bindir/fastNf $tmpdir/$msa`+0;
+    my $Nf=&run_calNf("$tmpdir/$msa");
+    my $hitnum=`grep '^>' $tmpdir/$msa|wc -l`+0;
     if ($Nf>=$max_Nf)
     {
         $max_Nf="$Nf";
-	$final_msa="$msa";
+        $max_hitnum=$hitnum;
+        $final_msa="$msa";
     }
 }
+
+#### covariance model without nhmmer ####
+=pod
+if ($max_Nf<$target_Nf && $max_hitnum<$max_hhfilter_seqs)
+{
+    print "==== alternative covariance model without nhmmer ====\n";
+    if (-s "$prefix.b.cm")
+    {
+        &System("cp $prefix.b.cm $tmpdir/blastn.cm");
+    }
+    else
+    {
+        &System("$bindir/makeblastdb -in $tmpdir/dball -parse_seqids -hash_index -dbtype nucl");
+        &System("$bindir/blastn -db $tmpdir/dball -query $tmpdir/seq.fasta -out $tmpdir/seq.blastn.out -evalue 0.001 -num_descriptions 1 -num_threads $cpu -line_length 1000 -num_alignments 50000");
+        &System("$bindir/parse_blastn_local.pl $tmpdir/seq.blastn.out $tmpdir/seq.fasta $tmpdir/seq.blastn.afa");
+        &addSS2cm("$tmpdir/seq.blastn.afa", "$tmpdir/blastn.cm");
+        &System("cp $tmpdir/blastn.cm $prefix.b.cm");
+    }
+
+    foreach my $incE((0.01,0.1,1,10))
+    {
+        if (-s "$prefix.cmsearch.b.$incE.afa.gz" && `zcat $prefix.cmsearch.b.$incE.afa.gz|wc -l`+0>0)
+        {
+            &gz2plain("$prefix.cmsearch.b.$incE.afa.gz", "$tmpdir/cmsearch.b.$incE.afa");
+        }
+        else
+        {
+            &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.b.$incE.a2m --cpu $cpu --incE $incE $tmpdir/blastn.cm $tmpdir/dball|grep 'no alignment saved'");
+            &addQuery2a2m("$tmpdir/cmsearch.b.$incE.a2m","$tmpdir/cmsearch.b.$incE.unfilter.afa");
+            &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.b.$incE.unfilter.afa","$tmpdir/cmsearch.b.$incE.afa");
+            &plain2gz("$tmpdir/cmsearch.b.$incE.afa", "$prefix.cmsearch.b.$incE.afa.gz");
+        }
+        my $Nf=&run_calNf("$tmpdir/cmsearch.b.$incE.afa");
+        if ($Nf>$max_Nf)
+        {
+            $max_Nf="$Nf";
+            $final_msa="cmsearch.b.$incE.afa";
+        }
+        my $hitnum=`grep '^>' $tmpdir/cmsearch.b.$incE.afa|wc -l`+0;
+        last if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs);
+    }
+}
+=cut
+
+
 print "output $final_msa (Nf=$max_Nf) as final MSA\n";
 &System("cp $tmpdir/$final_msa $prefix.afa");
 &Exit($tmpdir);
 
 
 #### submodules ####
+### add predicted ss to input fasta, output covariance model ###
+sub addSS2cm
+{
+    my ($infas,$outcm)=@_;
+    &System("$bindir/reformat.pl fas sto $infas $tmpdir/nhmmer.sto");
+
+    ## reformat ss with according to gaps in reference sequence of .sto file ##
+    &System("$bindir/RNAfold --noPS $tmpdir/seq.fasta | awk '{print \$1}' | tail -n +3 > $tmpdir/RNAfold.dbn") if (!-s "$tmpdir/RNAfold.dbn");
+    &System("cp $tmpdir/RNAfold.dbn $ssfile") if (!-s "$ssfile");
+    &System("cp $tmpdir/RNAfold.dbn $tmpdir/RNAfold.gap.dbn");
+    foreach my $i(`awk '{print \$2}' $tmpdir/nhmmer.sto | head -n5 | tail -n1 | grep -b -o - | sed 's/..\$//'`)
+    {
+        chomp($i);
+        &System("sed -i \"s/./&-/$i\" $tmpdir/RNAfold.gap.dbn");
+    }
+
+    ## add reformated ss from last step to .sto file ##
+    my $txt="";
+    foreach my $line(`head -n -1 $tmpdir/nhmmer.sto`)
+    {
+        chomp($line);
+        $line.="E=0.0" if ($line=~/^#=GF DE/);
+        $txt.="$line\n";
+    }
+    $txt.="#=GC SS_cons                     ";
+    $txt.=`cat $tmpdir/RNAfold.gap.dbn`;
+    $txt.="//\n";
+    open(FP,">$tmpdir/RNAfold.gap.sto");
+    print FP $txt;
+    close(FP);
+
+    &System("$bindir/cmbuild --hand -F $outcm $tmpdir/RNAfold.gap.sto");
+    &System("$bindir/cmcalibrate --cpu $cpu $outcm");
+}
+
+
 ### exit and clean up tmp folder ###
 sub Exit
 {
