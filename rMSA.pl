@@ -588,6 +588,7 @@ sub rmredundant_rawseq
 {
     my ($infile,$outfile)=@_;
     my $throw_away_sequences=int(0.4*$Lch);
+    $throw_away_sequences=9 if ($throw_away_sequences<10);
     &System("$bindir/cd-hit-est-2d -T $cpu -i $tmpdir/seq.fasta -i2 $infile -c 1.0 -o $tmpdir/cdhitest2d.db -l $throw_away_sequences -M 5000");
     &System("$bindir/cd-hit-est -T $cpu -i $tmpdir/cdhitest2d.db -c 1.0 -o $outfile -l $throw_away_sequences -M 5000");
     &System("rm $tmpdir/cdhitest2d.db");
