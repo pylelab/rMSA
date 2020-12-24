@@ -407,7 +407,7 @@ if ($query_file) {
 
 # unaligned positions
 for ($k=0; $k<$nhit; $k++) {
-    $hitseqs[$k]=~tr/a-z./A-Z./;
+    $hitseqs[$k]=~tr/a-z./A-Z-/;
     $hitseqs[$k]=~tr/Uu/Tt/;
 }
 
