@@ -47,8 +47,6 @@ my $max_aln_seqs     =100000; # max number of blastn alignmnets to parse
 my $max_hhfilter_seqs=5000;   # max number of hhfilter sequences to report
 my $min_hhfilter_seqs=10;     # min number of hhfilter sequences to report
 my $target_Nf        =128;
-my $target_Nf_cov    =60;     # only sequences with cov>=$target_Nf_cov are
-                              # included for Nf calculation
 
 my $inputfasta="";
 my $ssfile    ="";
@@ -187,8 +185,11 @@ my $task="blastn";
 $task="blastn-short" if ($Lch<30);
 
 #### prepare secondary structure ####
-$ssfile="$prefix.dbn" if (length $ssfile==0);
-if (length $ssfile>0 && !-s "$prefix.cm")
+if (length $ssfile==0)
+{
+    $ssfile="$prefix.dbn"
+}
+else
 {
     if (!-s "$ssfile")
     {
@@ -226,7 +227,6 @@ if (length $ssfile>0 && !-s "$prefix.cm")
     print FP "$ss\n";
     close(FP);
 }
-
 
 #### perform rfam search ####
 print "==== rfam pre-screening ====\n";
@@ -267,7 +267,7 @@ if (length $db0>0 && (!-s "$prefix.db.gz" || `zcat $prefix.db.gz|wc -l`+0==0)
         my $pattern=&list2pattern(@family_list);
         open(FP,">$tabfile");
         my $k=4;
-        $k=6 if ($dd=2);
+        $k=6 if ($dd==2);
         foreach my $line(`$cat $tmpdir/db0to$dd|grep -P "$pattern"|sort -gk$k,$k`)
         {
             if (($dd==1 && $line=~/^(\S+)\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(\d+)/)||
@@ -302,13 +302,27 @@ if (length $db0>0 && (!-s "$prefix.db.gz" || `zcat $prefix.db.gz|wc -l`+0==0)
             }
         }
         &System("rm $tmpdir/db0to$dd");
-        &retrieveSeq($tabfile, $db1, "rfam1") if ($dd==1);
-        &retrieveSeq($tabfile, $db2, "rfam2") if ($dd==2);
+        if ($dd==1)
+        {
+            for (my $d=0;$d<scalar @db1_list; $d++)
+            {
+                &retrieveSeq($tabfile, $db1_list[$d], "rfam1.$d");
+            }
+            &System("cat $tmpdir/rfam1.*.db > $tmpdir/rfam1.db");
+        }
+        else
+        {
+            for (my $d=0;$d<scalar @db2_list; $d++)
+            {
+                &retrieveSeq($tabfile, $db2_list[$d], "rfam2.$d");
+            }
+            &System("cat $tmpdir/rfam2.*.db > $tmpdir/rfam2.db");
+        }
     }
 
     if (-s "$tmpdir/rfam1.db" || -s "$tmpdir/rfam2.db")
     {
-        &System("cat $tmpdir/rfam1.db $tmpdir/rfam1.db > $tmpdir/db0");
+        &System("cat $tmpdir/rfam1.db $tmpdir/rfam2.db > $tmpdir/db0");
         &plain2gz("$tmpdir/db0", "$prefix.db0.gz");
     }
     system("wc -l $tmpdir/rfam*.db $tmpdir/db0");
@@ -402,7 +416,9 @@ for (my $dd=1;$dd<=2;$dd++)
         foreach (my $d=0;$d<scalar @db_list;$d++)
         {
             my $db    =$db_list[$d];
-            &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch$d.$dd.a2m --cpu $cpu --incE 10.0 $tmpdir/infernal.cm $db|grep 'no alignment saved'");
+            my $strand="--toponly";
+            $strand   ="" if ($dd==2);
+            &System("$bindir/qcmsearch $strand --noali -A $tmpdir/cmsearch$d.$dd.a2m --cpu $cpu --incE 10.0 $tmpdir/infernal.cm $db|grep 'no alignment saved'");
             my $tabfile="$tmpdir/cmsearch$d.$dd.tab";
             open(FP,">$tabfile");
             foreach my $line(`grep '^>' $tmpdir/cmsearch$d.$dd.a2m`)
@@ -486,7 +502,8 @@ foreach my $msa(qw(
     cmsearch.2.10.afa
 ))
 {
-    my $Nf=&run_calNf("$tmpdir/$msa");
+    #my $Nf=&run_calNf("$tmpdir/$msa");
+    my $Nf=`$bindir/fastNf $tmpdir/$msa`+0; # somehow, unfiltered Nf selects slightly better MSA
     my $hitnum=`grep '^>' $tmpdir/$msa|wc -l`+0;
     if ($Nf>=$max_Nf)
     {
@@ -495,50 +512,6 @@ foreach my $msa(qw(
         $final_msa="$msa";
     }
 }
-
-#### covariance model without nhmmer ####
-=pod
-if ($max_Nf<$target_Nf && $max_hitnum<$max_hhfilter_seqs)
-{
-    print "==== alternative covariance model without nhmmer ====\n";
-    if (-s "$prefix.b.cm")
-    {
-        &System("cp $prefix.b.cm $tmpdir/blastn.cm");
-    }
-    else
-    {
-        &System("$bindir/makeblastdb -in $tmpdir/dball -parse_seqids -hash_index -dbtype nucl");
-        &System("$bindir/blastn -db $tmpdir/dball -query $tmpdir/seq.fasta -out $tmpdir/seq.blastn.out -evalue 0.001 -num_descriptions 1 -num_threads $cpu -line_length 1000 -num_alignments 50000");
-        &System("$bindir/parse_blastn_local.pl $tmpdir/seq.blastn.out $tmpdir/seq.fasta $tmpdir/seq.blastn.afa");
-        &addSS2cm("$tmpdir/seq.blastn.afa", "$tmpdir/blastn.cm");
-        &System("cp $tmpdir/blastn.cm $prefix.b.cm");
-    }
-
-    foreach my $incE((0.01,0.1,1,10))
-    {
-        if (-s "$prefix.cmsearch.b.$incE.afa.gz" && `zcat $prefix.cmsearch.b.$incE.afa.gz|wc -l`+0>0)
-        {
-            &gz2plain("$prefix.cmsearch.b.$incE.afa.gz", "$tmpdir/cmsearch.b.$incE.afa");
-        }
-        else
-        {
-            &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.b.$incE.a2m --cpu $cpu --incE $incE $tmpdir/blastn.cm $tmpdir/dball|grep 'no alignment saved'");
-            &addQuery2a2m("$tmpdir/cmsearch.b.$incE.a2m","$tmpdir/cmsearch.b.$incE.unfilter.afa");
-            &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.b.$incE.unfilter.afa","$tmpdir/cmsearch.b.$incE.afa");
-            &plain2gz("$tmpdir/cmsearch.b.$incE.afa", "$prefix.cmsearch.b.$incE.afa.gz");
-        }
-        my $Nf=&run_calNf("$tmpdir/cmsearch.b.$incE.afa");
-        if ($Nf>$max_Nf)
-        {
-            $max_Nf="$Nf";
-            $final_msa="cmsearch.b.$incE.afa";
-        }
-        my $hitnum=`grep '^>' $tmpdir/cmsearch.b.$incE.afa|wc -l`+0;
-        last if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs);
-    }
-}
-=cut
-
 
 print "output $final_msa (Nf=$max_Nf) as final MSA\n";
 &System("cp $tmpdir/$final_msa $prefix.afa");
@@ -697,7 +670,9 @@ sub run_hhfilter
         print "too few sequences: $hitnum < $min_hhfilter_seqs.\n";
         foreach $cov ((40))
         {
-            &System("$bindir/hhfilter -i $infile -id $id -cov $cov -o $outfile");
+            #&System("$bindir/hhfilter -i $infile -id $id -cov $cov -o $outfile");
+            &System("$bindir/fasta2pfam $infile |cat -n |sort -u -k3|sort -n|grep -ohP '\\S+\\s\\S+\$'| $bindir/pfam2fasta - > $outfile.tmp");
+            &System("$bindir/hhfilter -i $outfile.tmp -id 100 -cov $cov -o $outfile");
             $hitnum=`grep '>' $outfile|wc -l`+0;
             last if ($hitnum>=$max_hhfilter_seqs);
         }
@@ -709,7 +684,8 @@ sub run_hhfilter
 sub run_calNf
 {
     my ($infile)=@_;
-    &System("$bindir/hhfilter -i $infile -id 99 -cov $target_Nf_cov -o $infile.$target_Nf_cov");
+    my $target_Nf_cov=60; # only include sequences with high cov for Nf count
+    system("$bindir/hhfilter -i $infile -id 99 -cov $target_Nf_cov -o $infile.$target_Nf_cov 1>/dev/null");
     my $target_Nf_tmp=$target_Nf+1;
     return `$bindir/fastNf $infile.$target_Nf_cov 0.8 0 $target_Nf_tmp`+0;
 }
