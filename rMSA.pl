@@ -11,6 +11,8 @@ my $db1    ="$dbdir/rnacentral.fasta";
 my $db2    ="$dbdir/nt";
 my $db0to1 ="$dbdir/rfam_annotations.tsv.gz";
 my $db0to2 ="$dbdir/Rfam.full_region.gz";
+my $cpu    =1;
+my $timeout=0;
 
 my $docstring=<<EOF
 rMSA.pl seq.fasta \\
@@ -19,7 +21,9 @@ rMSA.pl seq.fasta \\
     -db2=$db2 \\
     -db0to1=$db0to1 \\
     -db0to2=$db0to2 \\
-    -cpu=1 -tmpdir=/tmp/$ENV{USER}/rMSA_`date +%N`
+    -cpu=$cpu \\
+    -timeout=$timeout \\
+    -tmpdir=/tmp/$ENV{USER}/rMSA_`date +%N`
 
     for query sequence seq.fasta, output MSA to seq.afa
 
@@ -36,6 +40,8 @@ Input:
     tmpdir    - temporary folder
     ssfile    - optional dot brack secondary structure prediction file.
                 default is to predict ss by RNAfold.
+    timeout   - max running time for each cmsearch step, e.g. 47h for 47 hours.
+                default 0, which means no time limit
 EOF
 ;
 
@@ -50,7 +56,6 @@ my $target_Nf        =128;
 
 my $inputfasta="";
 my $ssfile    ="";
-my $cpu       =1;
 my $tmpdir    =""; #"/tmp/$ENV{USER}/rMSA_$$\_".`date +%N`;
 
 foreach (my $a=0;$a<@ARGV;$a++)
@@ -63,6 +68,7 @@ foreach (my $a=0;$a<@ARGV;$a++)
     elsif ($ARGV[$a]=~/-ssfile=(\S+)/) { $ssfile="$1"; }
     elsif ($ARGV[$a]=~/-cpu=(\S+)/)    { $cpu="$1"; }
     elsif ($ARGV[$a]=~/-tmpdir=(\S+)/) { $tmpdir="$1"; }
+    elsif ($ARGV[$a]=~/-timeout=(\S+)/){ $timeout="$1"; }
     else                               { $inputfasta=$ARGV[$a]; }
 }
 
@@ -73,6 +79,16 @@ push(@db1_list, split(/:/,"$db1"));
 push(@db2_list, split(/:/,"$db2"));
 push(@db_list,@db1_list);
 push(@db_list,@db2_list);
+
+#### timeout ####
+if ($timeout eq "0" || $timeout eq "")
+{
+    $timeout="";
+}
+else
+{
+    $timeout="timeout $timeout";
+}
 
 #### check input ####
 if (length $inputfasta == 0 || (scalar @db_list == 0))
@@ -187,7 +203,8 @@ $task="blastn-short" if ($Lch<30);
 #### prepare secondary structure ####
 if (length $ssfile==0)
 {
-    $ssfile="$prefix.dbn"
+    $ssfile="$prefix.dbn";
+    &System("cp $ssfile $tmpdir/RNAfold.dbn") if (-s "$ssfile");
 }
 else
 {
@@ -418,7 +435,7 @@ for (my $dd=1;$dd<=2;$dd++)
             my $db    =$db_list[$d];
             my $strand="--toponly";
             $strand   ="" if ($dd==2);
-            &System("$bindir/qcmsearch $strand --noali -A $tmpdir/cmsearch$d.$dd.a2m --cpu $cpu --incE 10.0 $tmpdir/infernal.cm $db|grep 'no alignment saved'");
+            &System("$timeout $bindir/qcmsearch $strand --noali -A $tmpdir/cmsearch$d.$dd.a2m --cpu $cpu --incE 10.0 $tmpdir/infernal.cm $db|grep 'no alignment saved'");
             my $tabfile="$tmpdir/cmsearch$d.$dd.tab";
             open(FP,">$tabfile");
             foreach my $line(`grep '^>' $tmpdir/cmsearch$d.$dd.a2m`)
@@ -439,6 +456,18 @@ for (my $dd=1;$dd<=2;$dd++)
         &plain2gz("$tmpdir/db$dd", "$prefix.db$dd.gz");
         system("wc -l $tmpdir/cmsearch*.$dd.db $tmpdir/db$dd");
     }
+    
+    if (`cat $tmpdir/db$dd|wc -l`+0==0 && ! -s "$prefix.cmsearch.$dd.afa.gz")
+    {
+        if    ($dd==1)
+        {
+            &System("cp $prefix.cmsearch.afa.gz   $prefix.cmsearch.1.afa.gz");
+        }
+        elsif ($dd==2)
+        {
+            &System("cp $prefix.cmsearch.1.afa.gz $prefix.cmsearch.2.afa.gz");
+        }
+    }
 
     if (-s "$prefix.cmsearch.$dd.afa.gz" && `zcat $prefix.cmsearch.$dd.afa.gz|wc -l`+0>0)
     {
@@ -457,8 +486,8 @@ for (my $dd=1;$dd<=2;$dd++)
         &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.$dd.unfilter.afa","$tmpdir/cmsearch.$dd.afa");
         &plain2gz("$tmpdir/cmsearch.$dd.afa", "$prefix.cmsearch.$dd.afa.gz");
     }
-    my $Nf=&run_calNf("$tmpdir/cmsearch.$dd.afa");
-    my $hitnum=`grep '^>' $tmpdir/cmsearch.$dd.afa|wc -l`+0;
+    $Nf=&run_calNf("$tmpdir/cmsearch.$dd.afa");
+    $hitnum=`grep '^>' $tmpdir/cmsearch.$dd.afa|wc -l`+0;
     if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs)
     {
         print "output cmsearch.$dd.afa (Nf>=$Nf) as final MSA\n";
@@ -484,8 +513,8 @@ foreach my $incE((0.1,1,10))
         &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.2.$incE.unfilter.afa","$tmpdir/cmsearch.2.$incE.afa");
         &plain2gz("$tmpdir/cmsearch.2.$incE.afa", "$prefix.cmsearch.2.$incE.afa.gz");
     }
-    my $Nf=&run_calNf("$tmpdir/cmsearch.2.$incE.afa");
-    my $hitnum=`grep '^>' $tmpdir/cmsearch.2.$incE.afa|wc -l`+0;
+    $Nf=&run_calNf("$tmpdir/cmsearch.2.$incE.afa");
+    $hitnum=`grep '^>' $tmpdir/cmsearch.2.$incE.afa|wc -l`+0;
     last if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs);
 }
 
@@ -502,9 +531,9 @@ foreach my $msa(qw(
     cmsearch.2.10.afa
 ))
 {
-    #my $Nf=&run_calNf("$tmpdir/$msa");
-    my $Nf=`$bindir/fastNf $tmpdir/$msa`+0; # somehow, unfiltered Nf selects slightly better MSA
-    my $hitnum=`grep '^>' $tmpdir/$msa|wc -l`+0;
+    #$Nf=&run_calNf("$tmpdir/$msa");
+    $Nf=`$bindir/fastNf $tmpdir/$msa`+0; # somehow, unfiltered Nf selects slightly better MSA
+    $hitnum=`grep '^>' $tmpdir/$msa|wc -l`+0;
     if ($Nf>=$max_Nf)
     {
         $max_Nf="$Nf";
@@ -513,8 +542,153 @@ foreach my $msa(qw(
     }
 }
 
-print "output $final_msa (Nf=$max_Nf) as final MSA\n";
-&System("cp $tmpdir/$final_msa $prefix.afa");
+if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs)
+{
+    print "output $final_msa (Nf=$max_Nf) as final MSA\n";
+    &System("cp $tmpdir/$final_msa $prefix.afa");
+    &Exit($tmpdir);
+}
+print "output $final_msa (Nf=$max_Nf) as final MSA A\n";
+&plain2gz("$tmpdir/$final_msa", "$prefix.a.afa.gz");
+
+#### RNAcmap style MSA ####
+print "==== alternative covariance model without nhmmer ====\n";
+@db_list =();
+push(@db_list,@db1_list);
+push(@db_list,@db2_list);
+$max_Nf=0;
+$final_msa="cmsearch.b0.afa";
+for (my $d=0;$d<scalar @db_list;$d++)
+{
+    my $db="$db_list[$d]";
+    #&System("$bindir/makeblastdb -in $db -parse_seqids -hash_index -dbtype nucl") if (! -s "$db.nal");
+    if (-s "$prefix.b$d.cm")
+    {
+        &System("cp $prefix.b$d.cm $tmpdir/blastn.cm");
+    }
+    else
+    {
+        my $strand="plus";
+        $strand   ="both" if ( grep( /^$db$/, @db2_list) );
+        &System("$bindir/blastn -db $db -query $tmpdir/seq.fasta -out $tmpdir/seq.blastn.out -evalue 0.001 -num_descriptions 1 -num_threads $cpu -line_length 1000 -num_alignments 50000 -strand $strand -task $task");
+        &System("$bindir/parse_blastn_local.pl $tmpdir/seq.blastn.out $tmpdir/seq.fasta $tmpdir/seq.blastn.N.afa");
+        &System("$bindir/fixAlnX $tmpdir/seq.blastn.N.afa N $tmpdir/seq.blastn.afa");
+        &addSS2cm("$tmpdir/seq.blastn.afa", "$tmpdir/blastn.cm");
+        &System("cp $tmpdir/blastn.cm $prefix.b$d.cm");
+    }
+
+    if (-s "$prefix.cmsearch.b$d.afa.gz" && `zcat $prefix.cmsearch.b$d.afa.gz|wc -l`+0>0)
+    {
+        &gz2plain("$prefix.cmsearch.b$d.afa.gz", "$tmpdir/cmsearch.b$d.afa");
+    }
+    else
+    {
+        my $strand="--toponly";
+        $strand   ="" if ( grep( /^$db$/, @db2_list) );
+        &System("$bindir/qcmsearch $strand --noali -A $tmpdir/cmsearch.b$d.a2m --cpu $cpu --incE 10.0 $tmpdir/blastn.cm $tmpdir/dball|grep 'no alignment saved'");
+        &addQuery2a2m("$tmpdir/cmsearch.b$d.a2m","$tmpdir/cmsearch.b$d.unfilter.afa");
+        &System("$bindir/fasta2pfam $tmpdir/cmsearch.b$d.unfilter.afa |cat -n |sort -u -k3|sort -n|grep -ohP '\\S+\\s\\S+\$'| $bindir/pfam2fasta - > $tmpdir/cmsearch.b$d.uniq.afa");
+        $hitnum=`grep '^>' $tmpdir/cmsearch.b$d.uniq.afa|wc -l`+0;
+        &System("cp $tmpdir/cmsearch.b$d.uniq.afa $tmpdir/cmsearch.b$d.afa");
+        if ($hitnum>=$max_hhfilter_seqs)
+        {
+            &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,
+                "$tmpdir/cmsearch.b$d.uniq.afa","$tmpdir/cmsearch.b$d.afa");
+        }
+        &System("rm $tmpdir/cmsearch.b$d.uniq.afa");
+        &plain2gz("$tmpdir/cmsearch.b$d.afa", "$prefix.cmsearch.b$d.afa.gz");
+    }
+    $hitnum=`grep '^>' $tmpdir/cmsearch.b$d.afa|wc -l`+0;
+    $Nf=&run_calNf("$tmpdir/cmsearch.b$d.afa");
+    if ($Nf>$max_Nf || $hitnum>=$max_hhfilter_seqs)
+    {
+        $max_Nf="$Nf";
+        $final_msa="cmsearch.b$d.afa";
+    }
+    last if ($Nf>=$target_Nf);
+}
+
+print "output $final_msa (Nf=$max_Nf) as final MSA B\n";
+&plain2gz("$tmpdir/$final_msa", "$prefix.b.afa.gz");
+
+#### select MSA by plmc score ####
+if (-s "$prefix.contact.txt")
+{
+    &System("cp $prefix.contact.txt $tmpdir/sorted.contact.txt");
+}
+else
+{
+    open(FP,">$tmpdir/seq.dbn.dot");
+    print FP `cat $tmpdir/seq.fasta $tmpdir/RNAfold.dbn`;
+    close(FP);
+    $ENV{DATAPATH}="$rootdir/data";
+    &System("$bindir/dot2ct $tmpdir/seq.dbn.dot $tmpdir/seq.dbn.ct");
+    my @pair_list=();
+    my $min_sep =4;      # |i-j|>=$min_sep
+    foreach my $line(`cat $tmpdir/seq.dbn.ct`)
+    {
+        if ($line=~/^\s*(\d+)\s+\w+\s+\d+\s+\d+\s+(\d+)/)
+        {
+            my $i  ="$1";
+            my $j  ="$2";
+            next if ($j-$i<$min_sep);
+            push(@pair_list,("$i\t$j"));
+        }
+    }
+
+    my $txt="";
+    foreach my $msa(("$prefix.a.afa.gz","$prefix.b.afa.gz"))
+    {
+        &gz2plain("$msa","$tmpdir/seq.afa");
+        $Nf=`$bindir/fastNf $tmpdir/seq.afa`+0;
+        &System("$bindir/plmc -c $tmpdir/seq.afa.dca_plmc -a -ACGT -le 20 -lh 0.01 -m 50 $tmpdir/seq.afa");
+        my $total_score=0;
+        my $tp=0;
+        my $fp=0;
+        foreach my $line(`sort -k6gr $tmpdir/seq.afa.dca_plmc`)
+        {
+            if ($line=~/^(\d+)\s+[-]\s+(\d+)\s+[-]\s+0\s+([-.eE\d]+)$/)
+            {
+                my $i="$1";
+                my $j="$2";
+                my $key   ="$i\t$j";
+                my $cscore="$3";
+                next if ($j-$i<$min_sep);
+                my $nt=substr($sequence,$i-1,1).substr($sequence,$j-1,1);
+                next if (! grep(/^$nt$/,("AT","TA","CG","GC","GT","TG")));
+                if (grep(/^$key$/, @pair_list))
+                {
+                    $total_score+=$cscore;
+                    $tp++;
+                }
+                else
+                {
+                    $total_score-=$cscore;
+                    $fp++;
+                }
+                last if ($tp+$fp>=scalar @pair_list);
+            }
+        }
+        my $line="$msa\t$Nf\t$tp\t$total_score\n";
+        print "$line";
+        $txt.="$line";
+        &System("rm $tmpdir/seq.afa");
+    }
+    open(FP,">$tmpdir/unsorted.contact.txt");
+    print FP "$txt";
+    close(FP);
+
+    &System("sort -k4gr $tmpdir/unsorted.contact.txt > $tmpdir/sorted.contact.txt");
+    &System("cp $tmpdir/sorted.contact.txt $prefix.contact.txt");
+}
+
+my $final_msa="$prefix.a.afa";
+if (`head -1 $tmpdir/sorted.contact.txt`=~/^(\S+)/)
+{
+    $final_msa="$1";
+}
+print "output $final_msa as final MSA\n";
+&System("zcat $final_msa > $prefix.afa");
 &Exit($tmpdir);
 
 
