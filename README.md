@@ -24,6 +24,8 @@ including alternative databases, temporary folders, number of CPU threads
 * cmbuild, cmcalibrate, cmscan and cmsearch from INFERNAL 1.1.3
 * hhfilter and reformat.pl from HH-suite 2.0.15
 * RNAfold from ViennaRNA 2.4.14
+* dot2ct from RNAstructure 6.2
+* plmc 2018-05-16
 
 The output format of nhmmer and cmsearch are modifed from
 ``eslMSAFILE_STOCKHOLM`` or ``eslMSAFILE_PFAM`` to ``eslMSAFILE_A2M``.
