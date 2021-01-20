@@ -612,6 +612,9 @@ print "output $final_msa (Nf=$max_Nf) as final MSA B\n";
 &plain2gz("$tmpdir/$final_msa", "$prefix.b.afa.gz");
 
 #### select MSA by plmc score ####
+# It is also possible to use plmc to score all MSAs, not just MSA A & B.
+# Since either scoring scheme generate about the same performance, and
+# plmc takes a long term for large MSAs, only MSA A & MSA B are scored.
 if (-s "$prefix.contact.txt")
 {
     &System("cp $prefix.contact.txt $tmpdir/sorted.contact.txt");
