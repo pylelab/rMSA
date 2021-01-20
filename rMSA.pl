@@ -500,7 +500,7 @@ for (my $dd=1;$dd<=2;$dd++)
 print "==== adjust cmsearch evalue ====\n";
 &System("cat $tmpdir/db $tmpdir/db1 $tmpdir/db2 > $tmpdir/trimall.db");
 &rmredundant_rawseq("$tmpdir/trimall.db", "$tmpdir/dball");
-foreach my $incE((0.1,1,10))
+foreach my $incE((10)) #foreach my $incE((0.1,1,10))
 {
     if (-s "$prefix.cmsearch.2.$incE.afa.gz" && `zcat $prefix.cmsearch.2.$incE.afa.gz|wc -l`+0>0)
     {
