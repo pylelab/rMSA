@@ -526,8 +526,6 @@ foreach my $msa(qw(
     cmsearch.afa
     cmsearch.1.afa
     cmsearch.2.afa
-    cmsearch.2.0.1.afa
-    cmsearch.2.1.afa
     cmsearch.2.10.afa
 ))
 {
