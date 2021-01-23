@@ -18,10 +18,13 @@ including alternative databases, temporary folders, number of CPU threads
 (default is 1) and the secondary structure. Nucleotide U is converted to T.
 
 ## Third party programs ##
-* nhmmer from HMMER 3.3
+The ``bin`` folder includes binaries precompiled for 64bit Linux for
+the following programs.
+
+* nhmmer (``bin/qnhmmer``) from HMMER 3.3
 * cd-hit-est and cd-hit-est-2d from CD-HIT 4.8.1
 * clustalo 1.2.4
-* cmbuild, cmcalibrate, cmscan and cmsearch from INFERNAL 1.1.3
+* cmbuild, cmcalibrate, cmscan and cmsearch (``bin/qcmsearch``) from INFERNAL 1.1.3
 * hhfilter and reformat.pl from HH-suite 2.0.15
 * RNAfold from ViennaRNA 2.4.14
 * dot2ct from RNAstructure 6.2
