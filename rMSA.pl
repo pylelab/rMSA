@@ -476,12 +476,14 @@ for (my $dd=1;$dd<=2;$dd++)
     else
     {
         &System("cat $tmpdir/db $tmpdir/db1 > $tmpdir/trimall.db");
+        my $incE="";
         if ($dd==2)
         {
             &System("cat $tmpdir/db $tmpdir/db1 $tmpdir/db2 > $tmpdir/trimall.db");
+            $incE="--incE 10.0";
         }
         &rmredundant_rawseq("$tmpdir/trimall.db", "$tmpdir/dball");
-        &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.$dd.a2m --cpu $cpu $tmpdir/infernal.cm $tmpdir/dball|grep 'no alignment saved'");
+        &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.$dd.a2m --cpu $cpu $incE $tmpdir/infernal.cm $tmpdir/dball|grep 'no alignment saved'");
         &addQuery2a2m("$tmpdir/cmsearch.$dd.a2m","$tmpdir/cmsearch.$dd.unfilter.afa");
         &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.$dd.unfilter.afa","$tmpdir/cmsearch.$dd.afa");
         &plain2gz("$tmpdir/cmsearch.$dd.afa", "$prefix.cmsearch.$dd.afa.gz");
@@ -496,28 +498,6 @@ for (my $dd=1;$dd<=2;$dd++)
     }
 }
 
-#### adjust --incE ####
-print "==== adjust cmsearch evalue ====\n";
-&System("cat $tmpdir/db $tmpdir/db1 $tmpdir/db2 > $tmpdir/trimall.db");
-&rmredundant_rawseq("$tmpdir/trimall.db", "$tmpdir/dball");
-foreach my $incE((10)) #foreach my $incE((0.1,1,10))
-{
-    if (-s "$prefix.cmsearch.2.$incE.afa.gz" && `zcat $prefix.cmsearch.2.$incE.afa.gz|wc -l`+0>0)
-    {
-        &gz2plain("$prefix.cmsearch.2.$incE.afa.gz", "$tmpdir/cmsearch.2.$incE.afa");
-    }
-    else
-    {
-        &System("$bindir/qcmsearch --noali -A $tmpdir/cmsearch.2.$incE.a2m --cpu $cpu --incE $incE $tmpdir/infernal.cm $tmpdir/dball|grep 'no alignment saved'");
-        &addQuery2a2m("$tmpdir/cmsearch.2.$incE.a2m","$tmpdir/cmsearch.2.$incE.unfilter.afa");
-        &run_hhfilter($max_hhfilter_seqs,$min_hhfilter_seqs,"$tmpdir/cmsearch.2.$incE.unfilter.afa","$tmpdir/cmsearch.2.$incE.afa");
-        &plain2gz("$tmpdir/cmsearch.2.$incE.afa", "$prefix.cmsearch.2.$incE.afa.gz");
-    }
-    $Nf=&run_calNf("$tmpdir/cmsearch.2.$incE.afa");
-    $hitnum=`grep '^>' $tmpdir/cmsearch.2.$incE.afa|wc -l`+0;
-    last if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs);
-}
-
 #### output the MSA with the highest nf ####
 my $max_Nf=0;
 my $max_hitnum=0;
@@ -526,7 +506,6 @@ foreach my $msa(qw(
     cmsearch.afa
     cmsearch.1.afa
     cmsearch.2.afa
-    cmsearch.2.10.afa
 ))
 {
     #$Nf=&run_calNf("$tmpdir/$msa");
