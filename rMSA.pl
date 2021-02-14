@@ -37,6 +37,7 @@ Input:
     db0to1    - mapping file from db0 to db1
     db0to2    - mapping file from db0 to db2
     cpu       - number of threads. default 1.
+                if 0, set number of threads according to sequence length.
     tmpdir    - temporary folder
     ssfile    - optional dot brack secondary structure prediction file.
                 default is to predict ss by RNAfold.
@@ -48,8 +49,8 @@ EOF
 my $max_rfam_num     =100;    # maximum number of rfam families to parse
 my $max_split_seqs   =5000;   # max number of blastn sequences to parse per batch
                               # control tmp file size. do not change final result
-my $max_target_seqs  =20000;  # max number of blastn sequences to report
-my $max_aln_seqs     =100000; # max number of blastn alignmnets to parse
+my $max_target_seqs  =50000;  # max number of blastn sequences to report
+my $max_aln_seqs     =200000; # max number of blastn alignmnets to parse
 my $max_hhfilter_seqs=5000;   # max number of hhfilter sequences to report
 my $min_hhfilter_seqs=10;     # min number of hhfilter sequences to report
 my $target_Nf        =128;
@@ -118,7 +119,7 @@ foreach my $db(@db_list)
         print "ERROR! No such file $db\n";
         exit(1);
     }
-    if (!-s "$db.nal")
+    if (!-s "$db.nal" && !-s "$db.ndb")
     {
         print "ERROR! $db not in blastn format. Please run\n";
         print "$dbdir/script/makeblastdb -in $db -parse_seqids -hash_index -dbtype nucl\n";
@@ -199,6 +200,18 @@ print FP ">query\n$sequence\n";
 close(FP);
 my $task="blastn";
 $task="blastn-short" if ($Lch<30);
+
+my $cmsearch_heuristics="";
+$cmsearch_heuristics="--rfam"    if ($Lch>300);
+$cmsearch_heuristics="--hmmonly" if ($Lch>450);
+
+if ($cpu==0)
+{
+   $cpu=int($Lch/150);
+   $cpu=1 if ($cpu<1);
+   $cpu=5 if ($cpu>5);
+}
+print "using $cpu cpu\n";
 
 #### prepare secondary structure ####
 if (length $ssfile==0)
@@ -422,7 +435,7 @@ for (my $dd=1;$dd<=2;$dd++)
     if (-s "$prefix.db$dd.gz" && (`zcat $prefix.db$dd.gz|wc -l`+0>0 ||
        (-s "$prefix.cmsearch.$dd.afa.gz" && `zcat $prefix.cmsearch.$dd.afa.gz|wc -l`+0>0)))
     {   # sometimes cmsearch db$dd cannot find additional hits.
-        # in this case, we $prefix.db$dd.gz is empty.
+        # in this case, $prefix.db$dd.gz is empty.
         &gz2plain("$prefix.db$dd.gz", "$tmpdir/db$dd");
     }
     else
@@ -435,12 +448,13 @@ for (my $dd=1;$dd<=2;$dd++)
             my $db    =$db_list[$d];
             my $strand="--toponly";
             $strand   ="" if ($dd==2);
-            &System("$timeout $bindir/qcmsearch $strand --noali -A $tmpdir/cmsearch$d.$dd.a2m --cpu $cpu --incE 10.0 $tmpdir/infernal.cm $db|grep 'no alignment saved'");
+            &System("$timeout $bindir/qcmsearch $cmsearch_heuristics $strand --noali -o $tmpdir/cmsearch$d.$dd.out --cpu $cpu --incE 10.0 $tmpdir/infernal.cm $db");
             my $tabfile="$tmpdir/cmsearch$d.$dd.tab";
             open(FP,">$tabfile");
-            foreach my $line(`grep '^>' $tmpdir/cmsearch$d.$dd.a2m`)
+            foreach my $line(`cat $tmpdir/cmsearch$d.$dd.out`)
             {
-                if ($line=~/^>(\S+)\/(\d+)-(\d+)/)
+                #if ($line=~/^>(\S+)\/(\d+)-(\d+)/)
+                if ($line=~/^\s*\(\d+\)\s+\!\s+\S+\s+\S+\s+\S+\s+(\S+)\s+(\d+)\s+(\d+)/)
                 {
                     my $saccver ="$1";
                     my $sstart  ="$2";
@@ -776,8 +790,13 @@ sub rmredundant_rawseq
     my ($infile,$outfile)=@_;
     my $throw_away_sequences=int(0.4*$Lch);
     $throw_away_sequences=9 if ($throw_away_sequences<10);
-    &System("$bindir/cd-hit-est-2d -T $cpu -i $tmpdir/seq.fasta -i2 $infile -c 1.0 -o $tmpdir/cdhitest2d.db -l $throw_away_sequences -M 5000");
-    &System("$bindir/cd-hit-est -T $cpu -i $tmpdir/cdhitest2d.db -c 1.0 -o $outfile -l $throw_away_sequences -M 5000");
+    my @c_list=(1.00, 0.95, 0.90);
+    for (my $i=0;$i<scalar @c_list; $i++)
+    {
+        &System("$bindir/cd-hit-est-2d -T $cpu -i $tmpdir/seq.fasta -i2 $infile -c $c_list[$i] -o $tmpdir/cdhitest2d.db -l $throw_away_sequences -M 5000");
+        &System("$bindir/cd-hit-est -T $cpu -i $tmpdir/cdhitest2d.db -c $c_list[$i] -o $outfile -l $throw_away_sequences -M 5000");
+        last if (`grep '>' $outfile|wc -l`+0<$max_aln_seqs);
+    }
     &System("rm $tmpdir/cdhitest2d.db");
     return;
 }
