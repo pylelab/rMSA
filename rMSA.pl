@@ -235,10 +235,10 @@ else
     }
     if ($ss!~/^[.()]+$/)
     {
-        print "ERROR! Only the following 3 symbols are allowed:\n";
+        print "WARNING! Only the following 3 symbols are needed:\n";
         print "( ) .\n";
         print "Pseudoknots are not allowed\n";
-        &Exit($tmpdir);
+        #&Exit($tmpdir);
     }
     my $Lss=length $ss;
     if ($Lss!=$Lch)
@@ -549,6 +549,11 @@ push(@db_list,@db1_list);
 push(@db_list,@db2_list);
 $max_Nf=0;
 $final_msa="cmsearch.b0.afa";
+if (!-s "$tmpdir/dball")
+{
+    &System("cat $tmpdir/db $tmpdir/db1 $tmpdir/db2 > $tmpdir/trimall.db");
+    &rmredundant_rawseq("$tmpdir/trimall.db", "$tmpdir/dball");
+}
 for (my $d=0;$d<scalar @db_list;$d++)
 {
     my $db="$db_list[$d]";
@@ -691,9 +696,12 @@ print "output $final_msa as final MSA\n";
 sub addSS2cm
 {
     my ($infas,$outcm)=@_;
-    &System("$bindir/reformat.pl fas sto $infas $tmpdir/nhmmer.sto");
+    ## overwrite sequence header to avoid duplicated name during cmbuild ##
+    &System("$bindir/fasta2pfam $infas |grep -ohP '\\S+\$' | cat -n | grep -ohP '\\d+\\s+\\S+'|sed 's/^/>/g'|sed 's/\\t/\\n/g' > $tmpdir/nhmmer.fas");
+    &System("$bindir/reformat.pl fas sto $tmpdir/nhmmer.fas $tmpdir/nhmmer.sto");
+    #&System("$bindir/reformat.pl fas sto $infas $tmpdir/nhmmer.sto");
 
-    ## reformat ss with according to gaps in reference sequence of .sto file ##
+    ## reformat ss according to gaps in reference sequence of .sto file ##
     &System("$bindir/RNAfold --noPS $tmpdir/seq.fasta | awk '{print \$1}' | tail -n +3 > $tmpdir/RNAfold.dbn") if (!-s "$tmpdir/RNAfold.dbn");
     &System("cp $tmpdir/RNAfold.dbn $ssfile") if (!-s "$ssfile");
     &System("cp $tmpdir/RNAfold.dbn $tmpdir/RNAfold.gap.dbn");
