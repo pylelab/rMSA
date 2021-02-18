@@ -2,7 +2,7 @@ CC=g++
 CFLAGS=-O3
 LDFLAGS=-static
 
-prog=a3m2msa fasta2pfam fastaNA fastaOneLine fastNf fixAlnX pfam2fasta RemoveNonQueryPosition trimBlastN
+prog=a3m2msa fasta2pfam fastaNA fastaOneLine fastNf fixAlnX pfam2fasta RemoveNonQueryPosition trimBlastN rFUpred
 
 
 all: ${prog}
@@ -33,6 +33,9 @@ RemoveNonQueryPosition: RemoveNonQueryPosition.cpp
 	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
 
 trimBlastN: trimBlastN.cpp
+	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
+
+rFUpred: rFUpred.cpp
 	${CC} ${CFLAGS} $@.cpp -o $@ ${LDFLAGS}
 
 install: ${prog}
