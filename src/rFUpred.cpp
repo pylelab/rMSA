@@ -87,12 +87,15 @@ void rFUpred(const string infile="-", const string outfile="-")
         FUscore_list[pos]=2*N12*(1./N1+1./N2);
     }
     FUscore_list[0]=FUscore_list[1];
+    vector<long int>().swap(resi1_vec);
+    vector<long int>().swap(resi2_vec);
 
     vector<pair<double,long int> > score_list;
     for (pos=2;pos<L-1;pos++)
         if (FUscore_list[pos]<=FUscore_list[pos-1] &&
             FUscore_list[pos]<=FUscore_list[pos+1])
             score_list.push_back(make_pair(FUscore_list[pos],pos));
+    vector<double>().swap(FUscore_list);
 
     vector<pair<double,pair<long int,long int> > > linker_list;
     vector<pair<double,long int> >linker;
