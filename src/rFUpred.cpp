@@ -42,6 +42,8 @@ void rFUpred(const string infile="-", const string outfile="-")
     if (infile!="-") fp_in.open(infile.c_str(),ios::in);
     vector<long int> resi1_vec;
     vector<long int> resi2_vec;
+    long int i,j;
+    long int L=0;
     while ((infile!="-")?fp_in.good():cin.good())
     {
         if (infile!="-") getline(fp_in,line);
@@ -50,8 +52,14 @@ void rFUpred(const string infile="-", const string outfile="-")
         split(line,line_vec);
         if (line_vec.size()>=6)
         {
-            resi1_vec.push_back(atol(line_vec[0].c_str()));
-            resi2_vec.push_back(atol(line_vec[4].c_str()));
+            L++;
+            i=atol(line_vec[0].c_str());
+            j=atol(line_vec[4].c_str());
+            if (j)
+            {
+                resi1_vec.push_back(i-1);
+                resi2_vec.push_back(j-1);
+            }
         }
         line_vec.clear();
         line.clear();
@@ -62,27 +70,20 @@ void rFUpred(const string infile="-", const string outfile="-")
 
 
     /* calculate FU score */
-    long int L=resi1_vec.size();
-    vector<bool> tmp_bool_vec(L,0);
-    vector<vector<bool> > contact_map(L,tmp_bool_vec);
-    vector<bool>().swap(tmp_bool_vec);
-    long int i,j,pos;
-    for (pos=0;pos<L;pos++)
-    {
-        i=resi1_vec[pos];
-        j=resi2_vec[pos];
-        if (j==0) continue;
-        contact_map[i-1][j-1]=1;
-    }
-    
     vector<double>FUscore_list(L,0);
+    long int pos, bp;
     double N12,N1,N2;
     for (pos=1;pos<L;pos++)
     {
         N12=N1=N2=1; // 1 is pseudo count to avoid division of 0
-        for (i=0;i<pos;i++) for (j=pos;j<L;j++) N12+=contact_map[i][j];
-        for (i=0;i<pos;i++) for (j=0;j<pos;j++) N1 +=contact_map[i][j];
-        for (i=pos;i<L;i++) for (j=pos;j<L;j++) N2 +=contact_map[i][j];
+        for (bp=0;bp<resi1_vec.size();bp++)
+        {
+            i=resi1_vec[bp];
+            j=resi2_vec[bp];
+            if (i<pos && j>=pos) N12++;
+            else if (i<pos && j<pos) N1++;
+            else if (i>=pos && j>=pos) N2++;
+        }
         FUscore_list[pos]=2*N12*(1./N1+1./N2);
     }
     FUscore_list[0]=FUscore_list[1];
