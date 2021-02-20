@@ -1,6 +1,17 @@
 const char* docstring=""
 "rFUpred seq.ct seq.FU\n"
-"    domain partition of RNA secondary structure in ct format\n"
+"    Split input RNA secondary structure file seq.ct into domains by\n"
+"    the FUpred algorithm. Output likely domain boundaries to seq.FU.\n"
+"    Each domain must have at least one base pair.\n"
+"\n"
+"Output format:\n"
+"    FUscore - a smaller Folding Unit score means a more likely boundary.\n"
+"    DC      - discontinuity. C for two continuous domains;\n"
+"              D for a discontinous domain inserted by another domain.\n"
+"    (domain1)(domain2) - boundaries of two domains without a linker\n"
+"    (domain1)linker(domain2) - boundaries of two domains with linker.\n"
+"             linker is in the format is i-j. if i<=j, i and j are the\n"
+"             linker boundaries; if i=j-1, there is no linker.\n"
 ;
 
 #include <iostream>
