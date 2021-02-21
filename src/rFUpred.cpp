@@ -6,6 +6,7 @@ const char* docstring=""
 "\n"
 "Output format:\n"
 "    FUscore - a smaller Folding Unit score means a more likely boundary.\n"
+"              FUscore>=1 means the predicted boundary is unreliable\n"
 "    DC      - discontinuity. C for two continuous domains;\n"
 "              D for a discontinous domain inserted by another domain.\n"
 "    (domain1)(domain2) - boundaries of two domains without a linker\n"
@@ -100,6 +101,7 @@ void rFUpred(const string infile="-", const string outfile="-")
             else if (pos<=i) N2++;
         }
         FUscore_list[pos]=2*N12*(1./N1+1./N2);
+        FUsele2d_mat[pos][pos]=(N1>1 && N2>1);
     }
     if (L>1) FUscore_list[0]=FUscore_list[1];
     
@@ -163,6 +165,7 @@ void rFUpred(const string infile="-", const string outfile="-")
         }
         if (accept==false) continue;
         mid=(resi1+resi2)/2;
+        if (!FUsele2d_mat[mid][mid]) continue;
         ss<<setiosflags(ios::fixed)<<setprecision(6)<<score
           <<"\tC\t(1-"<<mid<<")("<<mid+1<<"-"<<L<<")\t(1-"<<resi1
           <<")"<<resi1+1<<"-"<<resi2<<"("<<resi2+1<<"-"<<L<<")\t";
