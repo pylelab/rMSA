@@ -1,7 +1,28 @@
 #!/usr/bin/perl
-# This script is adapted from 
-# https://github.com/jaswindersingh2/RNAcmap/blob/master/parse_blastn_local.pl
-# which is licensed under Mozilla Public License 2.0
+# This script is adapted from the alignhits.pl script from Johannes Soeding's
+# HHsearch 1.5 package, which is under Attribution-NonCommercial-2.0 license
+# from Creative Commons (http://creativecommons.org/licenses/by-nc/2.0/).
+# The SUMMARY is the human-readable summary of this license.
+##############################################################################
+# SUMMARY
+#
+# You are free
+#  * to copy, distribute, display and perform the work
+#  * to make derivative works
+#
+# Under the following conditions:
+#  *  Attribution: You must give the original author credit.
+#  *  Noncommercial: You may not use this work for commercial purposes.
+#
+# For any reuse or distribution, you must make clear to others the license
+# terms of this work.
+#
+# Any of these conditions, in particular the second condition restricting the
+# use for commercial purposes, can be waived if you get permission from the
+# copyright holder.
+#
+# Your fair use and other rights are in no way affected by the above.
+##############################################################################
 use strict;
 
 if (@ARGV!=3)
