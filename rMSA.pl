@@ -22,6 +22,7 @@ rMSA.pl seq.fasta \\
     -db0to1=$db0to1 \\
     -db0to2=$db0to2 \\
     -cpu=$cpu \\
+    -fast=1 \\
     -timeout=$timeout \\
     -tmpdir=/tmp/$ENV{USER}/rMSA_`date +%N`
 
@@ -43,6 +44,11 @@ Input:
                 default is to predict ss by RNAfold.
     timeout   - max running time for each cmsearch step, e.g. 47h for 47 hours.
                 default 0, which means no time limit
+    fast      - heuristic level
+                0 - no heuristic for long sequences
+		1 - (default) heuristic to balance accuracy and time for
+		    long sequences
+		2 - aggresive heuristic for all sequences
 EOF
 ;
 
@@ -54,6 +60,7 @@ my $max_aln_seqs     =200000; # max number of blastn alignmnets to parse
 my $max_hhfilter_seqs=5000;   # max number of hhfilter sequences to report
 my $min_hhfilter_seqs=10;     # min number of hhfilter sequences to report
 my $target_Nf        =128;
+my $fast             =1;
 
 my $inputfasta="";
 my $ssfile    ="";
@@ -70,6 +77,7 @@ foreach (my $a=0;$a<@ARGV;$a++)
     elsif ($ARGV[$a]=~/-cpu=(\S+)/)    { $cpu="$1"; }
     elsif ($ARGV[$a]=~/-tmpdir=(\S+)/) { $tmpdir="$1"; }
     elsif ($ARGV[$a]=~/-timeout=(\S+)/){ $timeout="$1"; }
+    elsif ($ARGV[$a]=~/-fast=(\S+)/)   { $fast="$1"; }
     else                               { $inputfasta=$ARGV[$a]; }
 }
 
@@ -82,14 +90,8 @@ push(@db_list,@db1_list);
 push(@db_list,@db2_list);
 
 #### timeout ####
-if ($timeout eq "0" || $timeout eq "")
-{
-    $timeout="";
-}
-else
-{
-    $timeout="timeout $timeout";
-}
+if ($timeout eq "0" || $timeout eq "") { $timeout=""; }
+else {                 $timeout="timeout $timeout"; }
 
 #### check input ####
 if (length $inputfasta == 0 || (scalar @db_list == 0))
@@ -202,8 +204,11 @@ my $task="blastn";
 $task="blastn-short" if ($Lch<30);
 
 my $cmsearch_heuristics="";
-$cmsearch_heuristics="--rfam"    if ($Lch>300);
-$cmsearch_heuristics="--hmmonly" if ($Lch>450);
+if ($fast)
+{
+    $cmsearch_heuristics="--rfam"    if ($Lch>300);
+    $cmsearch_heuristics="--hmmonly" if ($Lch>450 || $fast>=2);
+}
 
 if ($cpu==0)
 {
@@ -421,7 +426,8 @@ else
 }
 
 my $Nf=&run_calNf("$tmpdir/cmsearch.afa");
-if ($Nf>=$target_Nf)
+$hitnum=`grep '^>' $tmpdir/cmsearch.afa|wc -l`+0;
+if ($Nf>=$target_Nf||($fast>=2 && $hitnum>=$max_hhfilter_seqs))
 {
     print "output cmsearch.afa (Nf>=$Nf) as final MSA\n";
     &System("cp $tmpdir/cmsearch.afa $prefix.afa");
@@ -504,7 +510,7 @@ for (my $dd=1;$dd<=2;$dd++)
     }
     $Nf=&run_calNf("$tmpdir/cmsearch.$dd.afa");
     $hitnum=`grep '^>' $tmpdir/cmsearch.$dd.afa|wc -l`+0;
-    if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs)
+    if ($Nf>=$target_Nf || ($fast && $hitnum>=$max_hhfilter_seqs))
     {
         print "output cmsearch.$dd.afa (Nf>=$Nf) as final MSA\n";
         &System("cp $tmpdir/cmsearch.$dd.afa $prefix.afa");
@@ -533,7 +539,7 @@ foreach my $msa(qw(
     }
 }
 
-if ($Nf>=$target_Nf || $hitnum>=$max_hhfilter_seqs)
+if ($Nf>=$target_Nf || ($fast && $hitnum>=$max_hhfilter_seqs))
 {
     print "output $final_msa (Nf=$max_Nf) as final MSA\n";
     &System("cp $tmpdir/$final_msa $prefix.afa");
@@ -799,6 +805,7 @@ sub rmredundant_rawseq
     my $throw_away_sequences=int(0.4*$Lch);
     $throw_away_sequences=9 if ($throw_away_sequences<10);
     my @c_list=(1.00, 0.99, 0.95, 0.90);
+    @c_list   =(1.00) if ($fast==0);
     for (my $i=0;$i<scalar @c_list; $i++)
     {
         &System("$bindir/cd-hit-est-2d -T $cpu -i $tmpdir/seq.fasta -i2 $infile -c $c_list[$i] -o $tmpdir/cdhitest2d.db -l $throw_away_sequences -M 5000");
