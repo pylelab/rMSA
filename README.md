@@ -1,5 +1,6 @@
 # rMSA #
-RNA Multiple Sequence Alignment generation
+rMSA (RNA Multiple Sequence Alignment) is an automated pipeline to search
+and align homologs from RNAcentral and nt databases for a target RNA.
 
 ## Install ##
 ```bash
