@@ -8,15 +8,9 @@ git clone https://github.com/kad-ecoli/rMSA
 cd rMSA
 ./database/script/update.sh    # Download RNAcentral and nt
 ```
-rMSA is for 64bit Linux (x86-64) only.
-
-## Run the program ##
-```bash
-./rMSA.pl seq.fasta
-```
-Run ``./rMSA.pl`` without command line argument to get full option list,
-including alternative databases, temporary folders, number of CPU threads
-(default is 1) and the secondary structure. Nucleotide U is converted to T.
+All precompiled binaries in the rMSA package are for 64bit Linux (x86-64) only.
+For other operating systems, you need to compile the rMSA ultilities using
+``src/Makefile``, and other thrid-party programs listed below.
 
 ## Third party programs ##
 The ``bin`` folder includes binaries precompiled for 64bit Linux for
@@ -33,6 +27,14 @@ the following programs.
 
 The output format of nhmmer and cmsearch are modifed from
 ``eslMSAFILE_STOCKHOLM`` or ``eslMSAFILE_PFAM`` to ``eslMSAFILE_A2M``.
+
+## Run the program ##
+```bash
+./rMSA.pl seq.fasta
+```
+Run ``./rMSA.pl`` without command line argument to get full option list,
+including alternative databases, temporary folders, number of CPU threads
+(default is 1) and the secondary structure. Nucleotide U is converted to T.
 
 ## License ##
 This program is free software: you can redistribute it and/or modify
