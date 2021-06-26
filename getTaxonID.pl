@@ -41,7 +41,7 @@ my $accession="";
 my @rc_list=();
 my @nt_list=();
 my $header;
-my $cmd="grep -P '";
+my $cmd="grep -E '";
 foreach $header(`grep '^>' $infile|sed 's/>//g'|cut -f1`)
 {
     chomp($header);
@@ -50,7 +50,7 @@ foreach $header(`grep '^>' $infile|sed 's/>//g'|cut -f1`)
     {
         $accession="$1";
         push(@rc_list,($accession)) if (! grep( /^$accession$/, @rc_list));
-        $cmd.="($accession)|";
+        $cmd.="$accession|";
     }
     elsif ($header=~/^([_A-Z0-9]+)[.]/)
     {
