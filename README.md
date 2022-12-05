@@ -44,5 +44,5 @@ the Free Software Foundation, either version 2 of the License, or
 
 ## Citation ##
 Chengxin Zhang, Yang Zhang, Anna Marie Pyle (2022)
-"rMSA: a sequence search and alignment algorithm to improve RNA structure modeling." 
+[rMSA: a sequence search and alignment algorithm to improve RNA structure modeling.](https://doi.org/10.1016/j.jmb.2022.167904)
 J Mol Biol. 167904.
