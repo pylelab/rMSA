@@ -41,3 +41,8 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 2 of the License, or
 (at your option) any later version.
+
+## Citation ##
+Chengxin Zhang, Yang Zhang, Anna Marie Pyle (2022)
+"rMSA: a sequence search and alignment algorithm to improve RNA structure modeling." 
+J Mol Biol. 167904.
