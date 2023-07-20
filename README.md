@@ -4,7 +4,7 @@ and align homologs from RNAcentral and nt databases for a target RNA.
 
 ## Install ##
 ```bash
-git clone https://github.com/kad-ecoli/rMSA
+git clone https://github.com/pylelab/rMSA
 cd rMSA
 ./database/script/update.sh    # Download RNAcentral and nt
 ```
